@@ -142,3 +142,11 @@ void Logger::writeThread() {
             logFile_.flush();
     }
 }
+
+LogLevel Logger::parseLogLevel(const std::string& levelStr) {
+    if (levelStr == "DEBUG") return LogLevel::DEBUG;
+    if (levelStr == "INFO") return LogLevel::INFO;
+    if (levelStr == "WARN") return LogLevel::WARN;
+    if (levelStr == "ERROR") return LogLevel::ERROR;
+    return LogLevel::INFO; // 默认值
+}

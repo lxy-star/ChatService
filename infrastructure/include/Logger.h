@@ -24,6 +24,7 @@ public:
     void stop();
 
     void log(LogLevel level, const std::string& message);
+    LogLevel parseLogLevel(const std::string& levelStr);
 
 private:
     Logger();

@@ -7,6 +7,7 @@
 #include <iostream>
 #include "RedisClient.h"
 #include "ChatManager.h"
+#include "Logger.h"
 
 Server::Server(asio::io_context &context,
                const std::string &ip,
@@ -31,9 +32,11 @@ std::shared_ptr<Server> Server::create(const std::string &configPath)
     std::string mysqlPass = ConfigLoader::getString("mysql_password");
     std::string mysqlDb = ConfigLoader::getString("mysql_db");
 
-    std::string redisHost = ConfigLoader::getString("redis_host");  // 新增
-    int redisPort = ConfigLoader::getInt("redis_port");             // 新增
-    std::string loglevel = ConfigLoader::getString("log_level"); //日志级别
+    std::string redisHost = ConfigLoader::getString("redis_host"); // 新增
+    int redisPort = ConfigLoader::getInt("redis_port");            // 新增
+    LogLevel loglevel = Logger::instance().parseLogLevel(ConfigLoader::getString("log_level"));
+    Logger::instance().setLogLevel(loglevel);
+    Logger::instance().start();
 
     static asio::io_context ioContext;
 
@@ -45,7 +48,6 @@ std::shared_ptr<Server> Server::create(const std::string &configPath)
 
     return std::make_shared<Server>(ioContext, ip, port, dispatcher);
 }
-
 
 void Server::start()
 {
