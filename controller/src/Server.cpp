@@ -33,6 +33,7 @@ std::shared_ptr<Server> Server::create(const std::string &configPath)
 
     std::string redisHost = ConfigLoader::getString("redis_host");  // 新增
     int redisPort = ConfigLoader::getInt("redis_port");             // 新增
+    std::string loglevel = ConfigLoader::getString("log_level"); //日志级别
 
     static asio::io_context ioContext;
 

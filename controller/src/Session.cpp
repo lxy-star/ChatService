@@ -1,30 +1,32 @@
 #include "Session.h"
 #include "Dispatcher.h"
 #include "SessionManager.h"
-#include <iostream>
+#include "Logger.h"  // 替换 std::cerr/std::cout 用
 
 Session::Session(asio::ip::tcp::socket socket, std::shared_ptr<Dispatcher> dispatcher)
     : socket_(std::move(socket)), dispatcher_(std::move(dispatcher)) {}
 
 void Session::start() {
+    Logger::instance().log(LogLevel::INFO, "Session started from IP: " + getClientIp());
     doRead();
 }
 
 void Session::doRead() {
     auto self = shared_from_this();
     asio::async_read_until(socket_, buffer_, '\n',
-        [this, self](std::error_code ec, [[maybe_unused]]std::size_t length) {
+        [this, self](std::error_code ec, [[maybe_unused]] std::size_t length) {
             if (!ec) {
                 std::istream is(&buffer_);
                 std::string line;
                 std::getline(is, line);
                 if (!line.empty()) {
+                    Logger::instance().log(LogLevel::DEBUG, "Received message from " + getClientIp() + ": " + line);
                     dispatcher_->handleRequest(self, line);
                 }
-                doRead(); // continue reading
+                doRead();  // continue reading
             } else {
-                std::cerr << "Session disconnected: " << ec.message() << std::endl;
-                SessionManager::instance().removeSession(self);  // 通知 SessionManager 移除
+                Logger::instance().log(LogLevel::WARN, "Session disconnected from " + getClientIp() + ": " + ec.message());
+                SessionManager::instance().removeSession(self);
             }
         });
 }
@@ -46,6 +48,7 @@ void Session::doWrite() {
         [this, self](std::error_code ec, std::size_t /*length*/) {
             std::lock_guard<std::mutex> lock(writeMutex_);
             if (!ec) {
+                Logger::instance().log(LogLevel::DEBUG, "Sent message to " + getClientIp() + ": " + writeQueue_.front());
                 writeQueue_.pop_front();
                 if (!writeQueue_.empty()) {
                     doWrite();
@@ -53,9 +56,9 @@ void Session::doWrite() {
                     writing_ = false;
                 }
             } else {
-                std::cerr << "Write error: " << ec.message() << std::endl;
+                Logger::instance().log(LogLevel::ERROR, "Write error to " + getClientIp() + ": " + ec.message());
                 writing_ = false;
-                SessionManager::instance().removeSession(self);  // 可选：断开时清理
+                SessionManager::instance().removeSession(self);
             }
         });
 }
@@ -65,6 +68,7 @@ void Session::close() {
         std::error_code ec;
         self->socket_.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
         self->socket_.close(ec);
+        Logger::instance().log(LogLevel::INFO, "Closed session for IP: " + self->getClientIp());
         SessionManager::instance().removeSession(self);
     });
 }

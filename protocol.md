@@ -13,7 +13,8 @@
   "mysql_password": "123456",
   "mysql_db": "chat_db",
   "redis_host": "127.0.0.1",
-  "redis_port": 6379
+  "redis_port": 6379,
+  "log_level": "DEBUG" 
 }
 ````
 
@@ -27,6 +28,7 @@
 * `mysql_db`：数据库名称（需预先创建）
 * `redis_host`：Redis 服务地址
 * `redis_port`：Redis 服务端口（默认 6379）
+* `log_level`：log_level 支持 DEBUG/INFO/WARN/ERROR
 
 ---
 

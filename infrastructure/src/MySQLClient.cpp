@@ -1,22 +1,22 @@
-// MySQLClient.cpp - 实现新增方法示例
 #include "MySQLClient.h"
+#include "Logger.h"
 #include <cppconn/prepared_statement.h>
 #include <ctime>
 #include "ChatMessage.h" 
-#include <mysql_driver.h>       // for sql::mysql::MySQL_Driver
-#include <mysql_connection.h>   // for sql::Connection
+#include <mysql_driver.h>
+#include <mysql_connection.h>
 
 MySQLClient::MySQLClient(const std::string& host,
                          const std::string& user,
                          const std::string& password,
-                         const std::string& db)
-{
+                         const std::string& db) {
     try {
         sql::mysql::MySQL_Driver* driver = sql::mysql::get_mysql_driver_instance();
         conn_.reset(driver->connect("tcp://" + host, user, password));
         conn_->setSchema(db);
+        Logger::instance().log(LogLevel::INFO, "Connected to MySQL: " + host + ", DB: " + db);
     } catch (const sql::SQLException &e) {
-        std::cerr << "MySQLClient constructor error: " << e.what() << std::endl;
+        Logger::instance().log(LogLevel::ERROR, std::string("MySQL connection failed: ") + e.what());
         throw;
     }
 }
@@ -28,10 +28,14 @@ bool MySQLClient::validateUser(const std::string& username, const std::string& p
         stmt->setString(1, username);
         stmt->setString(2, password);
         auto res = stmt->executeQuery();
-        if (res->next()) {
-            return res->getInt(1) > 0;
+        if (res->next() && res->getInt(1) > 0) {
+            Logger::instance().log(LogLevel::INFO, "User login validated: " + username);
+            return true;
+        } else {
+            Logger::instance().log(LogLevel::WARN, "Invalid login attempt: " + username);
         }
-    } catch (...) {
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("validateUser error: ") + e.what());
     }
     return false;
 }
@@ -43,10 +47,12 @@ bool MySQLClient::registerUser(const std::string& username, const std::string& p
         stmt->setString(1, username);
         stmt->setString(2, password);
         stmt->executeUpdate();
+        Logger::instance().log(LogLevel::INFO, "New user registered: " + username);
         return true;
-    } catch (...) {
-        return false;
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("registerUser error: ") + e.what());
     }
+    return false;
 }
 
 bool MySQLClient::userExists(const std::string& username) {
@@ -55,14 +61,14 @@ bool MySQLClient::userExists(const std::string& username) {
             "SELECT COUNT(*) FROM users WHERE username=?");
         stmt->setString(1, username);
         auto res = stmt->executeQuery();
-        if (res->next()) {
-            return res->getInt(1) > 0;
+        if (res->next() && res->getInt(1) > 0) {
+            return true;
         }
-    } catch (...) {
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("userExists error: ") + e.what());
     }
     return false;
 }
-
 
 bool MySQLClient::saveUserSession(const std::string& username, const std::string& token, const std::string& ip) {
     try {
@@ -75,8 +81,11 @@ bool MySQLClient::saveUserSession(const std::string& username, const std::string
         stmt->setString(3, ip);
         stmt->setString(4, token);
         stmt->setString(5, ip);
-        return stmt->executeUpdate() > 0;
-    } catch (...) {
+        bool success = stmt->executeUpdate() > 0;
+        Logger::instance().log(LogLevel::DEBUG, "Session saved for user: " + username + " IP: " + ip);
+        return success;
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("saveUserSession error: ") + e.what());
         return false;
     }
 }
@@ -86,8 +95,11 @@ bool MySQLClient::updateHeartbeat(const std::string& username) {
         auto stmt = conn_->prepareStatement(
             "UPDATE user_sessions SET last_heartbeat=NOW() WHERE username=? AND is_online=TRUE");
         stmt->setString(1, username);
-        return stmt->executeUpdate() > 0;
-    } catch (...) {
+        bool success = stmt->executeUpdate() > 0;
+        Logger::instance().log(LogLevel::DEBUG, "Heartbeat updated for user: " + username);
+        return success;
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("updateHeartbeat error: ") + e.what());
         return false;
     }
 }
@@ -97,8 +109,11 @@ bool MySQLClient::setUserOffline(const std::string& username) {
         auto stmt = conn_->prepareStatement(
             "UPDATE user_sessions SET is_online=FALSE WHERE username=?");
         stmt->setString(1, username);
-        return stmt->executeUpdate() > 0;
-    } catch (...) {
+        bool success = stmt->executeUpdate() > 0;
+        Logger::instance().log(LogLevel::INFO, "User set offline: " + username);
+        return success;
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("setUserOffline error: ") + e.what());
         return false;
     }
 }
@@ -109,11 +124,16 @@ bool MySQLClient::saveChatMessage(const std::string& fromUser, const std::string
         auto stmt = conn_->prepareStatement(
             "INSERT INTO chat_messages(from_user, to_user, message, sent_at) VALUES (?, ?, ?, NOW())");
         stmt->setString(1, fromUser);
-        if (toUser.empty()) stmt->setNull(2, sql::DataType::VARCHAR);
-        else stmt->setString(2, toUser);
+        if (toUser.empty())
+            stmt->setNull(2, sql::DataType::VARCHAR);
+        else
+            stmt->setString(2, toUser);
         stmt->setString(3, message);
-        return stmt->executeUpdate() > 0;
-    } catch (...) {
+        bool success = stmt->executeUpdate() > 0;
+        Logger::instance().log(LogLevel::DEBUG, "Message saved: from " + fromUser + " to " + (toUser.empty() ? "ALL" : toUser));
+        return success;
+    } catch (const std::exception& e) {
+        Logger::instance().log(LogLevel::ERROR, std::string("saveChatMessage error: ") + e.what());
         return false;
     }
 }
@@ -121,8 +141,6 @@ bool MySQLClient::saveChatMessage(const std::string& fromUser, const std::string
 std::vector<ChatMessage> MySQLClient::queryRecentChatMessages(const std::string& username, size_t limit) {
     std::vector<ChatMessage> result;
     try {
-        // 查询对该用户的单聊消息，和广播消息(to_user IS NULL)
-        // 按时间倒序，限制条数
         auto stmt = conn_->prepareStatement(
             "SELECT from_user, to_user, message, sent_at FROM chat_messages "
             "WHERE to_user = ? OR to_user IS NULL "
@@ -140,10 +158,10 @@ std::vector<ChatMessage> MySQLClient::queryRecentChatMessages(const std::string&
             result.push_back(std::move(msg));
         }
 
-        // 返回结果按时间正序排列（客户端按顺序显示）
         std::reverse(result.begin(), result.end());
+        Logger::instance().log(LogLevel::DEBUG, "Fetched recent chat messages for user: " + username);
     } catch (const std::exception &ex) {
-        std::cerr << "queryRecentChatMessages error: " << ex.what() << std::endl;
+        Logger::instance().log(LogLevel::ERROR, std::string("queryRecentChatMessages error: ") + ex.what());
     }
     return result;
 }
