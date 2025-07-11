@@ -164,6 +164,64 @@
 }
 ```
 
+### 2.6 验证用户或群聊是否存在 `verify_user / verify_group`
+
+**客户端请求：**
+
+```json
+{
+  "type": "verify_user",  // 或 "verify_group"
+  "target": "user2"
+}
+```
+**服务器响应：**
+
+```json
+{
+  "type": "verify_result",
+  "target": "user2",
+  "exists": true
+}
+```
+
+### 2.7 请求聊天会话列表 `get_chat_list`
+
+**客户端请求：**
+
+```json
+{
+  "type": "get_chat_list",
+  "username": "user1"
+}
+```
+**服务器响应：**
+
+```json
+{
+  "type": "chat_list",
+  "chats": ["user2", "groupA", "user3"]
+}
+```
+
+### 2.8 用户登出 `logout`
+
+**客户端请求：**
+
+```json
+{
+  "type": "logout",
+  "username": "user1"
+}
+```
+**服务器响应：**
+
+```json
+{
+  "type": "logout_result",
+  "success": true
+}
+```
+
 ---
 
 ## 3. 字段说明
